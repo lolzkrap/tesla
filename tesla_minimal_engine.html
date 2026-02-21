@@ -1,0 +1,199 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Tesla Minimal Engine</title>
+<style>
+body { margin:0; overflow:hidden; background:#111; font-family:Arial; }
+#hud {
+ position:absolute;
+ top:10px;
+ left:10px;
+ color:white;
+ background:rgba(0,0,0,0.7);
+ padding:15px;
+ border-radius:10px;
+ font-size:14px;
+}
+button { margin-top:5px; }
+canvas { background:#1a1a1a; display:block; }
+</style>
+</head>
+<body>
+
+<div id="hud">
+Speed: <span id="speed">0</span> km/h<br>
+Odometer: <span id="odo">0.00</span> km<br>
+Autopilot: <span id="ap">OFF</span><br>
+Time: <span id="time">Day</span><br>
+Weather: <span id="weather">Clear</span><br>
+<button onclick="toggleAP()">Toggle Autopilot (P)</button><br><br>
+<audio controls>
+<source src="" type="audio/mpeg">
+</audio>
+</div>
+
+<canvas id="game"></canvas>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+canvas.width = innerWidth;
+canvas.height = innerHeight;
+
+let chunkSize = 500;
+let chunks = {};
+
+let car = {
+ x:0,
+ y:0,
+ angle:0,
+ speed:0,
+ maxSpeed:220,
+ accel:0.15,
+ friction:0.02
+};
+
+let odometer = 0;
+let autopilot = false;
+let keys = {};
+let timeOfDay = 0;
+let weather = "Clear";
+
+document.addEventListener("keydown",e=>{
+ keys[e.key]=true;
+ if(e.key.toLowerCase()=="p") toggleAP();
+});
+document.addEventListener("keyup",e=>keys[e.key]=false);
+
+function toggleAP(){
+ autopilot=!autopilot;
+ document.getElementById("ap").innerText=autopilot?"ON":"OFF";
+}
+
+setInterval(()=>{
+ const types=["Clear","Fog","Rain"];
+ weather = types[Math.floor(Math.random()*types.length)];
+ document.getElementById("weather").innerText=weather;
+},20000);
+
+function generateChunk(cx,cy){
+ const key = cx+","+cy;
+ if(chunks[key]) return;
+
+ let buildings = [];
+ for(let i=0;i<20;i++){
+  buildings.push({
+   x: Math.random()*chunkSize,
+   y: Math.random()*chunkSize,
+   w: 40,
+   h: 40
+  });
+ }
+
+ chunks[key]=buildings;
+}
+
+function update(){
+
+ if(!autopilot){
+  if(keys["ArrowUp"]) car.speed+=car.accel;
+  if(keys["ArrowDown"]) car.speed-=car.accel*1.3;
+  if(keys["ArrowLeft"]) car.angle-=0.04;
+  if(keys["ArrowRight"]) car.angle+=0.04;
+ } else {
+  car.speed+=0.05;
+  car.angle+=Math.sin(Date.now()/1000)*0.002;
+ }
+
+ car.speed-=car.speed*car.friction;
+
+ if(car.speed>car.maxSpeed) car.speed=car.maxSpeed;
+ if(car.speed<0) car.speed=0;
+
+ car.x+=Math.cos(car.angle)*car.speed*0.1;
+ car.y+=Math.sin(car.angle)*car.speed*0.1;
+
+ odometer+=car.speed*0.00002;
+ timeOfDay+=0.0005;
+
+ document.getElementById("speed").innerText=car.speed.toFixed(0);
+ document.getElementById("odo").innerText=odometer.toFixed(2);
+ document.getElementById("time").innerText = 
+  (Math.sin(timeOfDay)>0)?"Day":"Night";
+}
+
+function drawWorld(){
+
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+
+ let brightness = (Math.sin(timeOfDay)+1)/2;
+ ctx.fillStyle=`rgba(${20+brightness*80},${20+brightness*80},${20+brightness*80},1)`;
+ ctx.fillRect(0,0,canvas.width,canvas.height);
+
+ let camX = car.x - canvas.width/2;
+ let camY = car.y - canvas.height/2;
+
+ let startX = Math.floor(car.x/chunkSize);
+ let startY = Math.floor(car.y/chunkSize);
+
+ for(let x=-1;x<=1;x++){
+  for(let y=-1;y<=1;y++){
+   generateChunk(startX+x,startY+y);
+   let buildings = chunks[(startX+x)+","+(startY+y)];
+
+   buildings.forEach(b=>{
+    ctx.fillStyle="#333";
+    ctx.fillRect(
+     b.x+(startX+x)*chunkSize - camX,
+     b.y+(startY+y)*chunkSize - camY,
+     b.w,b.h
+    );
+   });
+  }
+ }
+
+ ctx.strokeStyle="#555";
+ for(let i=-10000;i<10000;i+=200){
+  ctx.beginPath();
+  ctx.moveTo(i-camX,-10000-camY);
+  ctx.lineTo(i-camX,10000-camY);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(-10000-camX,i-camY);
+  ctx.lineTo(10000-camX,i-camY);
+  ctx.stroke();
+ }
+
+ ctx.save();
+ ctx.translate(canvas.width/2,canvas.height/2);
+ ctx.rotate(car.angle);
+ ctx.fillStyle="red";
+ ctx.fillRect(-20,-10,40,20);
+ ctx.restore();
+
+ if(weather==="Rain"){
+  ctx.fillStyle="rgba(200,200,255,0.3)";
+  for(let i=0;i<100;i++){
+   ctx.fillRect(Math.random()*canvas.width,Math.random()*canvas.height,2,10);
+  }
+ }
+
+ if(weather==="Fog"){
+  ctx.fillStyle="rgba(200,200,200,0.2)";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+ }
+}
+
+function loop(){
+ update();
+ drawWorld();
+ requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+</body>
+</html>
